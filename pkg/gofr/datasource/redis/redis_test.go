@@ -38,7 +38,8 @@ func Test_NewClient_InvalidPort(t *testing.T) {
 	mockMetrics.EXPECT().RecordHistogram(gomock.Any(), "app_redis_stats", gomock.Any(), "type", "ping")
 
 	client := NewClient(mockConfig, mockLogger, mockMetrics)
-	assert.Nil(t, client.Client, "Test_NewClient_InvalidPort Failed! Expected redis client to be nil")
+
+	assert.Equal(t, client.config.Port, defaultRedisPort, "Test_NewClient_InvalidPort Failed! Expected redis client to be nil")
 }
 
 func TestRedis_QueryLogging(t *testing.T) {
@@ -118,4 +119,24 @@ func TestRedis_PipelineQueryLogging(t *testing.T) {
 	// Assertions
 	assert.Contains(t, result, "ping")
 	assert.Contains(t, result, "set key1 value1 ex 60: OK")
+}
+
+func Test_NewClient_ConnectionRetry(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	logs := testutil.StdoutOutputForFunc(func() {
+		mockLogger := testutil.NewMockLogger(testutil.DEBUGLOG)
+		mockMetrics := NewMockMetrics(ctrl)
+		mockConfig := config.NewMockConfig(map[string]string{"REDIS_HOST": "localhost",
+			"REDIS_PORT": "1234"})
+
+		mockMetrics.EXPECT().RecordHistogram(gomock.Any(), "app_redis_stats", gomock.Any(), "type", "ping").AnyTimes()
+
+		_ = NewClient(mockConfig, mockLogger, mockMetrics)
+
+		time.Sleep(2 * time.Second)
+	})
+
+	assert.Contains(t, logs, `retrying REDIS connection`, "Test_NewClient_ConnectionRetry Failed! Expected log %v", `retrying REDIS connection`)
 }
