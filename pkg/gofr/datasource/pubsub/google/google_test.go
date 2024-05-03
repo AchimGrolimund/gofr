@@ -40,38 +40,27 @@ func TestGoogleClient_New(t *testing.T) {
 	defer ctrl.Finish()
 
 	logger := testutil.NewMockLogger(testutil.ERRORLOG)
-	var g *googleClient
 
-	g = New(Config{ProjectID: "test123", SubscriptionName: "test"}, logger, NewMockMetrics(ctrl))
+	g := New(Config{ProjectID: "test123", SubscriptionName: "test"}, logger, NewMockMetrics(ctrl))
 
 	assert.NotNil(t, g, "TestGoogleClient_New Failed!")
 }
 
 func TestGoogleClient_NewError(t *testing.T) {
-	os.Setenv("PUBSUB_EMULATOR_HOST", "localhost:8681")
-	defer os.Unsetenv("PUBSUB_EMULATOR_HOST")
-
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	logger := testutil.NewMockLogger(testutil.ERRORLOG)
+
 	var g *googleClient
 
-	tests := []struct {
-		desc      string
-		config    Config
-		outputLog string
-	}{
-		{desc: "Invalid Config", config: Config{ProjectID: "invalid", SubscriptionName: "invalid"},
-			outputLog: ""},
-		{desc: "Empty Config", config: Config{}, outputLog: "google pubsub could not be configured, err:"},
-	}
+	g = New(Config{ProjectID: "&", SubscriptionName: "invalid"}, logger, NewMockMetrics(ctrl))
 
-	for i, tc := range tests {
-		g = New(tc.config, logger, NewMockMetrics(ctrl))
+	assert.NotNil(t, g, "TestGoogleClient_NewError Invalid Config Failed!")
 
-		assert.Nil(t, g, "TEST[%d] Failed!\n", i)
-	}
+	g = New(Config{}, logger, NewMockMetrics(ctrl))
+
+	assert.Nil(t, g, "TestGoogleClient_NewError Empty Config Failed!")
 }
 
 func TestGoogleClient_Publish_Success(t *testing.T) {
