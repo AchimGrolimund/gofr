@@ -2,6 +2,7 @@ package google
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	gcPubSub "cloud.google.com/go/pubsub"
@@ -31,22 +32,46 @@ func getGoogleClient(t *testing.T) *gcPubSub.Client {
 	return client
 }
 
-func TestGoogleClient_New_Error(t *testing.T) {
-	var (
-		g *googleClient
-	)
+func TestGoogleClient_New(t *testing.T) {
+	os.Setenv("PUBSUB_EMULATOR_HOST", "localhost:8681")
+	defer os.Unsetenv("PUBSUB_EMULATOR_HOST")
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	out := testutil.StderrOutputForFunc(func() {
-		logger := testutil.NewMockLogger(testutil.ERRORLOG)
+	logger := testutil.NewMockLogger(testutil.ERRORLOG)
+	var g *googleClient
 
-		g = New(Config{}, logger, NewMockMetrics(ctrl))
-	})
+	g = New(Config{ProjectID: "test123", SubscriptionName: "test"}, logger, NewMockMetrics(ctrl))
 
-	assert.Nil(t, g)
-	assert.Contains(t, out, "google pubsub could not be configured")
+	assert.NotNil(t, g, "TestGoogleClient_New Failed!")
+}
+
+func TestGoogleClient_NewError(t *testing.T) {
+	os.Setenv("PUBSUB_EMULATOR_HOST", "localhost:8681")
+	defer os.Unsetenv("PUBSUB_EMULATOR_HOST")
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	logger := testutil.NewMockLogger(testutil.ERRORLOG)
+	var g *googleClient
+
+	tests := []struct {
+		desc      string
+		config    Config
+		outputLog string
+	}{
+		{desc: "Invalid Config", config: Config{ProjectID: "invalid", SubscriptionName: "invalid"},
+			outputLog: ""},
+		{desc: "Empty Config", config: Config{}, outputLog: "google pubsub could not be configured, err:"},
+	}
+
+	for i, tc := range tests {
+		g = New(tc.config, logger, NewMockMetrics(ctrl))
+
+		assert.Nil(t, g, "TEST[%d] Failed!\n", i)
+	}
 }
 
 func TestGoogleClient_Publish_Success(t *testing.T) {
@@ -171,4 +196,28 @@ func Test_validateConfigs(t *testing.T) {
 
 		assert.Equal(t, tc.expErr, err)
 	}
+}
+
+func TestGoogleClient_CreateAndDeleteTopic(t *testing.T) {
+	os.Setenv("PUBSUB_EMULATOR_HOST", "localhost:8681")
+	defer os.Unsetenv("PUBSUB_EMULATOR_HOST")
+
+	ctx := context.Background()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	logger := testutil.NewMockLogger(testutil.ERRORLOG)
+	mockMetrics := NewMockMetrics(ctrl)
+
+	g := New(Config{
+		ProjectID:        "test123",
+		SubscriptionName: "test",
+	}, logger, mockMetrics)
+
+	err := g.CreateTopic(ctx, "test-topic")
+	assert.Nil(t, err)
+
+	err = g.DeleteTopic(ctx, "test-topic")
+	assert.Nil(t, err)
 }
